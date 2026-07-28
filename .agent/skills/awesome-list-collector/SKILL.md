@@ -20,6 +20,7 @@ Use this skill whenever gathering new entries or creating an initial JSON datase
 2. **VERIFY OFFICIAL ORGANIZATIONAL DOMAINS**:
    - Always prefer official corporate, NGO, or state web domains (`.org`, `.com`, `.gov.kh`) over social media profile pages whenever available.
    - Never use personal user profile links (e.g. Facebook profiles displaying an `+ Add friend` button instead of a public Page, or Telegram personal user handles displaying `If you have Telegram, you can contact @...`).
+   - Sections titled **Facebook Groups and Communities** MUST strictly contain `https://www.facebook.com/groups/**` URLs. Do not mix company pages into group sections.
 3. **TELEGRAM COMMUNITY CREDIBILITY AUDIT**:
    - Telegram links (`t.me/*`) MUST represent active public channels or groups.
    - You MUST verify that the Telegram resource has **at least 50 subscribers or members**. Any channel with fewer than 50 members or displaying personal contact prompts MUST be excluded.

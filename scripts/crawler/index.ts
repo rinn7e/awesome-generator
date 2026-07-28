@@ -99,17 +99,21 @@ async function scanPlaywrightDom(url: string) {
       locale: "en-US",
     });
     page = await context.newPage();
-    await page.goto(url, { waitUntil: "domcontentloaded", timeout: 10000 });
-    await page.waitForTimeout(1000);
+    await page.goto(url, { waitUntil: "domcontentloaded", timeout: 12000 });
+    await page.waitForTimeout(1500);
 
     const bodyText = (await page.innerText("body")).toLowerCase();
 
+    // Active public Facebook group detection
+    const isPublicGroup = bodyText.includes("public group") || bodyText.includes("members") || bodyText.includes("join group");
+
     const isUnavailable =
-      bodyText.includes("this content isn't available right now") ||
-      bodyText.includes("this content isn't available") ||
-      bodyText.includes("isn't available right now") ||
-      bodyText.includes("this page isn't available") ||
-      bodyText.includes("content not found");
+      !isPublicGroup &&
+      (bodyText.includes("this content isn't available right now") ||
+        bodyText.includes("this content isn't available") ||
+        bodyText.includes("isn't available right now") ||
+        bodyText.includes("this page isn't available") ||
+        bodyText.includes("content not found"));
 
     const finalStatus = isUnavailable ? 404 : 200;
     const finalDate = isUnavailable ? "Unreachable" : "Active";
