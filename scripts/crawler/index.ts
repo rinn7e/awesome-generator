@@ -86,6 +86,48 @@ function setCachedEntry(url: string, status: number | string, date: string): Nix
 }
 
 /**
+ * Universal Soft-404 Redirect Detection Rule:
+ * Checks if a requested URL with a specific path was redirected to a fallback path (e.g. homepage "/", "/404", "/buy/condo")
+ */
+function isUniversalSoft404Redirect(requestedUrl: string, finalUrl: string): boolean {
+  try {
+    const req = new URL(requestedUrl);
+    const final = new URL(finalUrl);
+
+    // Normalize paths by removing trailing slashes
+    const reqPath = req.pathname.replace(/\/+$/, "");
+    const finalPath = final.pathname.replace(/\/+$/, "");
+
+    // Path is identical or only differed by trailing slash -> Valid
+    if (reqPath === finalPath) return false;
+
+    // Rule 1: Requested a specific subpath (e.g. /borey-for-sale), but redirected to homepage ("/" or "")
+    if (reqPath.length > 0 && (finalPath === "" || finalPath === "/index.html" || finalPath === "/home")) {
+      return true;
+    }
+
+    // Rule 2: Redirected to known soft-404 fallback endpoints
+    const fallbackPatterns = [
+      /\/buy\/condo/i, // Specific soft-404 fallback redirect endpoint for Realestate.com.kh
+      /\/404/i,
+      /\/error/i,
+      /\/not-found/i,
+      /\/default/i,
+    ];
+
+    for (const pattern of fallbackPatterns) {
+      if (pattern.test(finalPath) && !pattern.test(reqPath)) {
+        return true;
+      }
+    }
+
+    return false;
+  } catch {
+    return false;
+  }
+}
+
+/**
  * Scan Facebook & complex JS web links using Playwright DOM rendering
  */
 async function scanPlaywrightDom(url: string) {
@@ -101,6 +143,11 @@ async function scanPlaywrightDom(url: string) {
     page = await context.newPage();
     await page.goto(url, { waitUntil: "domcontentloaded", timeout: 12000 });
     await page.waitForTimeout(1500);
+
+    const currentUrl = page.url();
+    if (isUniversalSoft404Redirect(url, currentUrl)) {
+      return { status: 404, date: `Unreachable (Soft-404 Redirect to ${new URL(currentUrl).pathname})` };
+    }
 
     const bodyText = (await page.innerText("body")).toLowerCase();
 
@@ -241,6 +288,19 @@ async function checkUrl(url: string, forceFetch: boolean, matchPattern?: string)
       signal: controller.signal,
     });
     clearTimeout(timeoutId);
+
+    // RULE 3: Universal Soft-404 Path Redirect Check across ALL websites!
+    const finalUrl = res.url;
+    if (isUniversalSoft404Redirect(url, finalUrl)) {
+      const redirectPath = new URL(finalUrl).pathname;
+      const saved = setCachedEntry(url, 404, `Unreachable (Soft-404 Redirect to ${redirectPath})`);
+      return {
+        status: 404,
+        date: `Unreachable (Soft-404 Redirect to ${redirectPath})`,
+        fromCache: false,
+        hash: saved.hash,
+      };
+    }
 
     const html = await res.text();
     const lastModifiedHeader = res.headers.get("last-modified");
