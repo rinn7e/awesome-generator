@@ -69,10 +69,10 @@ function buildSectionLines(sections: AwesomeSection[], depth = 4): string[] {
 
     if (section.items && section.items.length > 0) {
       for (const item of section.items) {
-        const dateTag = item.lastUpdated ? ` *(${formatDateLabel(item.lastUpdated)})*` : "";
         const formattedDesc = formatDescription(item.description);
         const descSeparator = formattedDesc ? ` - ${formattedDesc}` : "";
-        lines.push(`- [${item.title}](${item.url})${dateTag}${descSeparator}`);
+        const dateTag = item.lastUpdated ? ` *(${formatDateLabel(item.lastUpdated)})*` : "";
+        lines.push(`- [${item.title}](${item.url})${descSeparator}${dateTag}`);
       }
       lines.push("");
     }
