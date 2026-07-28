@@ -22,6 +22,17 @@ It also includes an integrated **Nix-style source crawler and auditor** (`npm ru
 
 ---
 
+## Dataset Sorting Strategy
+
+`awesome-generator` strictly respects and follows the exact section and item order defined in the input JSON dataset file. It does not forcefully mutate or re-order your data during Markdown rendering.
+
+When authoring JSON datasets, follow these recommended sorting guidelines:
+
+- **Sections (Categories)**: Sort sections logically from **General / Common** resources first down to **Specific / Specialized** resources.
+- **Entries (Items)**: Sort items within each section **Alphabetically** by title (A to Z).
+
+---
+
 ## CLI Usage
 
 ### Generate Markdown
