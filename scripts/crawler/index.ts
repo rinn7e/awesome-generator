@@ -348,7 +348,7 @@ async function runAudit() {
   console.log("=== CRAWLING AND AUDITING AWESOME LIST SOURCE ===");
   console.log(`Input File: ${inputPath}`);
   if (forceFetch) console.log("Cache bypass requested (--force)");
-  if (matchPattern) console.log(`Target link filter / targeted force requested: --match "${matchPattern}"`);
+  if (matchPattern) console.log(`Target link filter / targeted force requested: --force-match "${matchPattern}"`);
   if (verbose) console.log("Verbose output enabled (--verbose)");
   console.log("");
 
@@ -439,7 +439,7 @@ function parseCrawlerArgs() {
       forceFetch = true;
     } else if (args[i] === "--verbose") {
       verbose = true;
-    } else if ((args[i] === "--match" || args[i] === "--url") && args[i + 1]) {
+    } else if ((args[i] === "--force-match" || args[i] === "--url") && args[i + 1]) {
       matchPattern = args[i + 1];
       i++;
     } else if (!inputPath && !args[i].startsWith("-")) {

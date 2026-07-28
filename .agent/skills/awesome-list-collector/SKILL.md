@@ -75,4 +75,5 @@ Run the crawler to verify HTTP reachability across all entries:
 pnpm run crawl -- --input /path/to/dataset.json
 ```
 
+- Note: Run `--force` only for the initial once audit if cache bypass is needed. For targeted single-link re-testing, use `pnpm run crawl -- --input /path/to/dataset.json --force-match <pattern>`.
 - Ensure **`Unreachable: 0`**. If any link reports status `404` or `Unreachable`, locate the correct live URL or remove the item before finalizing.
