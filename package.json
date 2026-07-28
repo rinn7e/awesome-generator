@@ -1,10 +1,12 @@
 {
   "name": "awesome-generator",
   "version": "1.0.0",
+  "license": "GPL-3.0-or-later",
   "description": "CLI tool to generate awesome curated lists in markdown format from structured TypeScript data",
   "main": "dist/index.js",
   "scripts": {
     "generate": "ts-node src/index.ts",
+    "crawl": "ts-node scripts/crawler/index.ts",
     "build": "tsc",
     "check": "tsc --noEmit"
   },
@@ -12,5 +14,9 @@
     "@types/node": "^20.11.0",
     "ts-node": "^10.9.2",
     "typescript": "^5.3.3"
+  },
+  "dependencies": {
+    "fp-ts": "^2.16.11",
+    "io-ts": "^2.2.22"
   }
 }

@@ -8,12 +8,29 @@ function slugify(text: string): string {
     .replace(/\s+/g, "-");
 }
 
+function formatDateLabel(dateStr: string): string {
+  const trimmed = dateStr.trim();
+  if (!trimmed) return "";
+  const parts = trimmed.split("-");
+  if (parts.length >= 2) {
+    const year = parts[0];
+    const monthNum = parseInt(parts[1], 10);
+    const monthNames = [
+      "Jan", "Feb", "Mar", "Apr", "May", "Jun",
+      "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"
+    ];
+    if (monthNum >= 1 && monthNum <= 12) {
+      return `${monthNames[monthNum - 1]} ${year}`;
+    }
+  }
+  return trimmed;
+}
+
 function formatDescription(desc: string): string {
   let formatted = desc.trim();
   if (!formatted) return "";
   // Capitalize first letter
   formatted = formatted.charAt(0).toUpperCase() + formatted.slice(1);
-  // Ensure it ends with a period
   if (!formatted.endsWith(".")) {
     formatted += ".";
   }
@@ -51,7 +68,8 @@ export function formatAwesomeList(list: AwesomeList): string {
 
     for (const item of section.items) {
       const itemDesc = formatDescription(item.description);
-      lines.push(`- [${item.title}](${item.url}) - ${itemDesc}`);
+      const dateTag = item.lastUpdated ? ` *(${formatDateLabel(item.lastUpdated)})*` : "";
+      lines.push(`- [${item.title}](${item.url})${dateTag} - ${itemDesc}`);
     }
     lines.push("");
   }
@@ -68,24 +86,14 @@ export function formatAwesomeList(list: AwesomeList): string {
     // Default Footers
     lines.push("## Contributing");
     lines.push("");
-    lines.push("Contributions welcome! Read the [contributing guide](contributing.md) first.");
+    lines.push("Contributions welcome! Please read the contribution guidelines below before submitting a pull request:");
+    lines.push("");
+    lines.push("- Search existing entries to avoid duplicates.");
+    lines.push("- Ensure the link is active and relevant.");
+    lines.push("- Add items in alphabetical order within the appropriate section.");
+    lines.push("- Ensure descriptions start with a capital letter and end with a period.");
     lines.push("");
   }
 
   return lines.join("\n").trim() + "\n";
-}
-
-export function formatContributingMd(title: string): string {
-  return `# Contributing to Awesome ${title}
-
-Contributions are welcome! Please read these guidelines before submitting a pull request.
-
-## Guidelines
-
-- Search existing entries to avoid duplicates.
-- Ensure the link is active and relevant.
-- Add items in alphabetical order within the appropriate section.
-- Use the format: \`- [Title](URL) - Description.\`
-- Start the description with a capital letter and end with a period.
-`;
 }

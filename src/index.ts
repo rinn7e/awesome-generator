@@ -1,41 +1,71 @@
 import * as fs from "fs";
 import * as path from "path";
-import { cambodiaJobsData } from "./data/cambodia-jobs";
-import { formatAwesomeList, formatContributingMd } from "./formatter/awesome-formatter";
-import { AwesomeList } from "./types";
+import { formatAwesomeList } from "./formatter/awesome-formatter";
+import { validateAwesomeList } from "./types";
+
+function parseArgs(): { inputPath: string; outputPath: string } {
+  const args = process.argv.slice(2);
+  let inputPath = "";
+  let outputPath = "";
+
+  for (let i = 0; i < args.length; i++) {
+    const arg = args[i];
+    if (arg === "--input" || arg === "-i") {
+      inputPath = args[++i];
+    } else if (arg === "--output" || arg === "-o") {
+      outputPath = args[++i];
+    } else if (!inputPath && !arg.startsWith("-")) {
+      inputPath = arg;
+    } else if (!outputPath && !arg.startsWith("-")) {
+      outputPath = arg;
+    }
+  }
+
+  if (!inputPath || !outputPath) {
+    console.error("Error: Missing required arguments.\n");
+    console.log("Usage:");
+    console.log("  npm run generate -- --input <path/to/input.json> --output <path/to/output.md>");
+    console.log("  npx ts-node src/index.ts <path/to/input.json> <path/to/output.md>\n");
+    console.log("Example:");
+    console.log("  npm run generate -- --input ../awesome-list/awesome-cambodia-jobs/cambodia-jobs.json --output ../awesome-list/awesome-cambodia-jobs/README.md");
+    process.exit(1);
+  }
+
+  return {
+    inputPath: path.resolve(inputPath),
+    outputPath: path.resolve(outputPath),
+  };
+}
 
 function main() {
-  const lists: AwesomeList[] = [cambodiaJobsData];
+  const { inputPath, outputPath } = parseArgs();
 
-  const outputBaseDir = path.resolve(__dirname, "..", "output");
+  if (!fs.existsSync(inputPath)) {
+    console.error(`Error: Input file does not exist: ${inputPath}`);
+    process.exit(1);
+  }
 
-  for (const list of lists) {
-    const slug = list.slug;
-    const listOutputDir = path.join(outputBaseDir, slug);
+  try {
+    // Read raw JSON content
+    const rawContent = fs.readFileSync(inputPath, "utf8");
+    const rawJson = JSON.parse(rawContent);
 
-    try {
-      // Ensure output directory exists
-      fs.mkdirSync(listOutputDir, { recursive: true });
+    // Validate JSON against io-ts schema
+    const validatedList = validateAwesomeList(rawJson);
+    console.log(`Successfully validated dataset "${inputPath}" (slug: ${validatedList.slug})`);
 
-      // Generate README.md
-      const mdContent = formatAwesomeList(list);
-      const mdPath = path.join(listOutputDir, "README.md");
-      fs.writeFileSync(mdPath, mdContent, "utf8");
+    // Ensure output parent directory exists
+    const outputDir = path.dirname(outputPath);
+    fs.mkdirSync(outputDir, { recursive: true });
 
-      // Generate contributing.md
-      const contributingContent = formatContributingMd(list.title);
-      const contributingPath = path.join(listOutputDir, "contributing.md");
-      fs.writeFileSync(contributingPath, contributingContent, "utf8");
+    // Format Markdown and write to output destination
+    const mdContent = formatAwesomeList(validatedList);
+    fs.writeFileSync(outputPath, mdContent, "utf8");
 
-      console.log(
-        `Successfully generated Awesome list for "${list.title}" at: ${mdPath}`
-      );
-    } catch (err: any) {
-      console.error(
-        `Failed to generate Awesome list for "${list.title}": ${err?.message || String(err)}`
-      );
-      process.exit(1);
-    }
+    console.log(`Successfully generated Awesome list README at: ${outputPath}`);
+  } catch (err: any) {
+    console.error(`Failed to process dataset: ${err?.message || String(err)}`);
+    process.exit(1);
   }
 }
 

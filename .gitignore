@@ -4,3 +4,8 @@ npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 .DS_Store
+scripts/crawler/cache/
+
+# Untracked custom & scratch scripts
+scratch/
+scripts/scratch/
