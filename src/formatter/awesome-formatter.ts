@@ -88,10 +88,8 @@ function buildSectionLines(sections: AwesomeSection[], depth = 4): string[] {
 export function formatAwesomeList(list: AwesomeList): string {
   const lines: string[] = [];
 
-  const badgeUrl =
-    list.badgeUrl ||
-    "https://cdn.rawgit.com/sindresorhus/awesome/d7305f38d29fed78fa85652e3a63e154dd8e8829/media/badge.svg";
-  const badgeLink = list.badgeLink || "https://github.com/sindresorhus/awesome";
+  const badgeUrl = list.badgeUrl || "https://awesome.re/badge.svg";
+  const badgeLink = list.badgeLink || "https://awesome.re";
 
   // Title with Badge
   lines.push(`# Awesome ${list.title} [![Awesome](${badgeUrl})](${badgeLink})`);
