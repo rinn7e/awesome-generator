@@ -1,4 +1,4 @@
-import { AwesomeList } from "../types";
+import { AwesomeList, AwesomeSection } from "../types";
 
 function slugify(text: string): string {
   return text
@@ -26,7 +26,8 @@ function formatDateLabel(dateStr: string): string {
   return trimmed;
 }
 
-function formatDescription(desc: string): string {
+function formatDescription(desc?: string): string {
+  if (!desc) return "";
   let formatted = desc.trim();
   if (!formatted) return "";
   // Capitalize first letter
@@ -37,61 +38,111 @@ function formatDescription(desc: string): string {
   return formatted;
 }
 
-export function formatAwesomeList(list: AwesomeList): string {
+function buildTocLines(sections: AwesomeSection[], depth = 1): string[] {
+  const lines: string[] = [];
+  const indent = "  ".repeat(depth);
+
+  for (const section of sections) {
+    const anchor = slugify(section.title);
+    lines.push(`${indent}- [${section.title}](#${anchor})`);
+
+    if (section.subsections && section.subsections.length > 0) {
+      lines.push(...buildTocLines(section.subsections, depth + 1));
+    }
+  }
+
+  return lines;
+}
+
+function buildSectionLines(sections: AwesomeSection[], depth = 4): string[] {
   const lines: string[] = [];
 
-  // Title with Badge
-  lines.push(`# Awesome ${list.title} [![Awesome](https://awesome.re/badge.svg)](https://awesome.re)`);
-  lines.push("");
-
-  // Description
-  lines.push(list.description.trim());
-  lines.push("");
-
-  // Table of Contents
-  lines.push("## Contents");
-  lines.push("");
-  for (const section of list.sections) {
-    const anchor = slugify(section.title);
-    lines.push(`- [${section.title}](#${anchor})`);
-  }
-  lines.push("");
-
-  // Sections
-  for (const section of list.sections) {
-    lines.push(`## ${section.title}`);
+  for (const section of sections) {
+    const headingHashes = "#".repeat(depth);
+    lines.push(`${headingHashes} ${section.title}`);
     lines.push("");
+
     if (section.description) {
       lines.push(section.description.trim());
       lines.push("");
     }
 
-    for (const item of section.items) {
-      const itemDesc = formatDescription(item.description);
-      const dateTag = item.lastUpdated ? ` *(${formatDateLabel(item.lastUpdated)})*` : "";
-      lines.push(`- [${item.title}](${item.url})${dateTag} - ${itemDesc}`);
+    if (section.items && section.items.length > 0) {
+      for (const item of section.items) {
+        const dateTag = item.lastUpdated ? ` *(${formatDateLabel(item.lastUpdated)})*` : "";
+        const formattedDesc = formatDescription(item.description);
+        const descSeparator = formattedDesc ? ` - ${formattedDesc}` : "";
+        lines.push(`- [${item.title}](${item.url})${dateTag}${descSeparator}`);
+      }
+      lines.push("");
     }
-    lines.push("");
+
+    if (section.subsections && section.subsections.length > 0) {
+      lines.push(...buildSectionLines(section.subsections, Math.min(depth + 1, 6)));
+    }
   }
+
+  return lines;
+}
+
+export function formatAwesomeList(list: AwesomeList): string {
+  const lines: string[] = [];
+
+  const badgeUrl =
+    list.badgeUrl ||
+    "https://cdn.rawgit.com/sindresorhus/awesome/d7305f38d29fed78fa85652e3a63e154dd8e8829/media/badge.svg";
+  const badgeLink = list.badgeLink || "https://github.com/sindresorhus/awesome";
+
+  // Title with Badge
+  lines.push(`# Awesome ${list.title} [![Awesome](${badgeUrl})](${badgeLink})`);
+  lines.push("");
+
+  // Description
+  lines.push(list.description.trim());
+  lines.push("");
+  lines.push("");
+
+  // Table of Contents grouped under main list title like awesome-react
+  const titleAnchor = slugify(list.title);
+  lines.push(`- [${list.title}](#${titleAnchor})`);
+  lines.push(...buildTocLines(list.sections, 1));
+
+  // Add footers to TOC (e.g. - [Contribution](#contribution))
+  if (list.footers && list.footers.length > 0) {
+    for (const footer of list.footers) {
+      lines.push(`- [${footer.title}](#${slugify(footer.title)})`);
+    }
+  } else {
+    lines.push("- [Contribution](#contribution)");
+  }
+  lines.push("");
+
+  // Main Section Group Header (### Title)
+  lines.push(`### ${list.title}`);
+  lines.push("");
+
+  // Category Subsections (#### Category)
+  lines.push(...buildSectionLines(list.sections, 4));
 
   // Footers
   if (list.footers && list.footers.length > 0) {
     for (const footer of list.footers) {
-      lines.push(`## ${footer.title}`);
+      lines.push(`### ${footer.title}`);
       lines.push("");
       lines.push(footer.content.trim());
       lines.push("");
     }
   } else {
-    // Default Footers
-    lines.push("## Contributing");
+    // Default Footer matching awesome-react style
+    lines.push("### Contribution");
     lines.push("");
-    lines.push("Contributions welcome! Please read the contribution guidelines below before submitting a pull request:");
-    lines.push("");
-    lines.push("- Search existing entries to avoid duplicates.");
-    lines.push("- Ensure the link is active and relevant.");
-    lines.push("- Add items in alphabetical order within the appropriate section.");
-    lines.push("- Ensure descriptions start with a capital letter and end with a period.");
+    lines.push(
+      "Contributions welcome! Please read the contribution guidelines before submitting a pull request:\n\n" +
+      "- Search existing entries to avoid duplicates.\n" +
+      "- Ensure the link is active and relevant.\n" +
+      "- Add items in alphabetical order within the appropriate section.\n" +
+      "- Ensure descriptions start with a capital letter and end with a period."
+    );
     lines.push("");
   }
 

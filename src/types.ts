@@ -6,22 +6,34 @@ export const AwesomeItemType = t.intersection([
   t.type({
     title: t.string,
     url: t.string,
-    description: t.string,
   }),
   t.partial({
+    description: t.string,
     lastUpdated: t.string,
   }),
 ]);
 
-export const AwesomeSectionType = t.intersection([
-  t.type({
-    title: t.string,
-    items: t.array(AwesomeItemType),
-  }),
-  t.partial({
-    description: t.string,
-  }),
-]);
+export interface AwesomeSection {
+  title: string;
+  description?: string;
+  items?: AwesomeItem[];
+  subsections?: AwesomeSection[];
+}
+
+export const AwesomeSectionType: t.Type<AwesomeSection> = t.recursion(
+  "AwesomeSection",
+  () =>
+    t.intersection([
+      t.type({
+        title: t.string,
+      }),
+      t.partial({
+        description: t.string,
+        items: t.array(AwesomeItemType),
+        subsections: t.array(AwesomeSectionType),
+      }),
+    ])
+);
 
 export const AwesomeFooterSectionType = t.type({
   title: t.string,
@@ -36,12 +48,13 @@ export const AwesomeListType = t.intersection([
     sections: t.array(AwesomeSectionType),
   }),
   t.partial({
+    badgeUrl: t.string,
+    badgeLink: t.string,
     footers: t.array(AwesomeFooterSectionType),
   }),
 ]);
 
 export type AwesomeItem = t.TypeOf<typeof AwesomeItemType>;
-export type AwesomeSection = t.TypeOf<typeof AwesomeSectionType>;
 export type AwesomeFooterSection = t.TypeOf<typeof AwesomeFooterSectionType>;
 export type AwesomeList = t.TypeOf<typeof AwesomeListType>;
 
