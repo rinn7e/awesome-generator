@@ -226,20 +226,22 @@ async function runAudit() {
   console.log(`Dataset: ${list.title} (${list.slug})`);
   for (const section of list.sections) {
     console.log(`\nSection: ${section.title}`);
-    for (const item of section.items) {
-      const info = await checkUrl(item.url, forceFetch);
-      const cacheTag = info.fromCache ? `[CACHE HIT:${info.hash.slice(0, 8)}]` : `[CRAWLED:${info.hash.slice(0, 8)}]`;
-      console.log(` ${cacheTag} ${item.title} (${item.url}) -> Status: ${info.status}, Date: ${info.date}`);
-      auditResults.push({
-        list: list.slug,
-        section: section.title,
-        title: item.title,
-        url: item.url,
-        status: info.status,
-        date: info.date,
-        fromCache: info.fromCache,
-        nixHash: info.hash,
-      });
+    if (section.items && section.items.length > 0) {
+      for (const item of section.items) {
+        const info = await checkUrl(item.url, forceFetch);
+        const cacheTag = info.fromCache ? `[CACHE HIT:${info.hash.slice(0, 8)}]` : `[CRAWLED:${info.hash.slice(0, 8)}]`;
+        console.log(` ${cacheTag} ${item.title} (${item.url}) -> Status: ${info.status}, Date: ${info.date}`);
+        auditResults.push({
+          list: list.slug,
+          section: section.title,
+          title: item.title,
+          url: item.url,
+          status: info.status,
+          date: info.date,
+          fromCache: info.fromCache,
+          nixHash: info.hash,
+        });
+      }
     }
   }
 
