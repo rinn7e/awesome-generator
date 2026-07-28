@@ -5,8 +5,8 @@ import { chromium, Browser } from "playwright";
 import { AwesomeList } from "../../src/types";
 
 const STORE_DIR = path.join(__dirname, "cache", "store");
-const NIX_STORE_FILE = path.join(__dirname, "cache", "nix-store.json");
 const DEFAULT_TTL_MS = 30 * 24 * 60 * 60 * 1000; // 30 Days
+const MIN_TELEGRAM_SUBSCRIBERS = 50;
 
 interface NixStoreEntry {
   hash: string;
@@ -15,11 +15,6 @@ interface NixStoreEntry {
   date: string;
   crawledAt: string;
   expiresAt: string;
-}
-
-interface NixStoreManifest {
-  version: string;
-  store: Record<string, NixStoreEntry>;
 }
 
 let sharedBrowser: Browser | null = null;
@@ -46,23 +41,6 @@ function ensureCacheDirs() {
   if (!fs.existsSync(STORE_DIR)) {
     fs.mkdirSync(STORE_DIR, { recursive: true });
   }
-}
-
-function loadNixStore(): NixStoreManifest {
-  ensureCacheDirs();
-  if (fs.existsSync(NIX_STORE_FILE)) {
-    try {
-      return JSON.parse(fs.readFileSync(NIX_STORE_FILE, "utf8"));
-    } catch {
-      // Return fresh manifest if corrupt
-    }
-  }
-  return { version: "1.0", store: {} };
-}
-
-function saveNixStore(manifest: NixStoreManifest) {
-  ensureCacheDirs();
-  fs.writeFileSync(NIX_STORE_FILE, JSON.stringify(manifest, null, 2), "utf8");
 }
 
 function getCachedEntry(url: string, forceFetch: boolean): NixStoreEntry | null {
@@ -100,14 +78,9 @@ function setCachedEntry(url: string, status: number | string, date: string): Nix
     expiresAt: expires.toISOString(),
   };
 
-  // Save individual store object
+  // Save individual content-addressed store file (e.g. cache/store/<hash>.json)
   const entryFile = path.join(STORE_DIR, `${hash}.json`);
   fs.writeFileSync(entryFile, JSON.stringify(entry, null, 2), "utf8");
-
-  // Save in main nix-store.json
-  const nixStore = loadNixStore();
-  nixStore.store[hash] = entry;
-  saveNixStore(nixStore);
 
   return entry;
 }
@@ -149,8 +122,73 @@ async function scanPlaywrightDom(url: string) {
   }
 }
 
-async function checkUrl(url: string, forceFetch: boolean) {
-  const cached = getCachedEntry(url, forceFetch);
+/**
+ * Parse Telegram subscriber/member count from preview page HTML
+ */
+function parseTelegramSubscriberCount(html: string): number | null {
+  const extraMatch = html.match(/class=["']tgme_page_extra["'][^>]*>([^<]+)</i);
+  if (!extraMatch) return null;
+
+  const text = extraMatch[1];
+  const countMatch = text.match(/([\d\s.,]+)\s*([KkMm])?\s*(subscribers|members)/i);
+  if (!countMatch) return null;
+
+  let numStr = countMatch[1].replace(/[\s,]/g, "");
+  let num = parseFloat(numStr);
+  const unit = (countMatch[2] || "").toLowerCase();
+  if (unit === "k") num *= 1000;
+  if (unit === "m") num *= 1000000;
+
+  return Math.round(num);
+}
+
+/**
+ * Audit Telegram resource for public channel/group existence and credibility
+ */
+async function auditTelegramUrl(url: string) {
+  try {
+    const res = await fetch(url, {
+      method: "GET",
+      headers: {
+        "User-Agent":
+          "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+      },
+    });
+    const html = await res.text();
+
+    const isPersonalOrNonExistent =
+      html.includes("you can contact @") ||
+      html.includes("you can contact") ||
+      !html.includes("tgme_page_extra");
+
+    if (isPersonalOrNonExistent) {
+      return {
+        status: 404,
+        date: "Unreachable (Not a Public Channel/Group or Non-existent)",
+      };
+    }
+
+    const count = parseTelegramSubscriberCount(html);
+
+    if (count === null || count < MIN_TELEGRAM_SUBSCRIBERS) {
+      return {
+        status: 404,
+        date: `Unreachable (Low Subscribers: ${count ?? 0} < ${MIN_TELEGRAM_SUBSCRIBERS})`,
+      };
+    }
+
+    return {
+      status: res.status,
+      date: `Active (${count} members)`,
+    };
+  } catch {
+    return { status: 404, date: "Unreachable" };
+  }
+}
+
+async function checkUrl(url: string, forceFetch: boolean, matchPattern?: string) {
+  const shouldForce = forceFetch || (Boolean(matchPattern) && url.includes(matchPattern!));
+  const cached = getCachedEntry(url, shouldForce);
   if (cached) {
     return {
       status: cached.status,
@@ -160,9 +198,21 @@ async function checkUrl(url: string, forceFetch: boolean) {
     };
   }
 
-  // RULE: Facebook-related links MUST NOT use basic fetch(). Scan DOM via Playwright headless browser!
+  // RULE 1: Facebook-related links MUST NOT use basic fetch(). Scan DOM via Playwright headless browser!
   if (url.includes("facebook.com") || url.includes("fb.com")) {
     const { status, date } = await scanPlaywrightDom(url);
+    const saved = setCachedEntry(url, status, date);
+    return {
+      status,
+      date,
+      fromCache: false,
+      hash: saved.hash,
+    };
+  }
+
+  // RULE 2: Telegram links MUST be audited for public channel/group existence & credibility (>= 50 subscribers/members)!
+  if (url.includes("t.me/") || url.includes("telegram.me/")) {
+    const { status, date } = await auditTelegramUrl(url);
     const saved = setCachedEntry(url, status, date);
     return {
       status,
@@ -229,11 +279,12 @@ async function checkUrl(url: string, forceFetch: boolean) {
 }
 
 async function runAudit() {
-  const { inputPath, forceFetch, verbose } = parseCrawlerArgs();
+  const { inputPath, forceFetch, verbose, matchPattern } = parseCrawlerArgs();
 
   console.log("=== CRAWLING AND AUDITING AWESOME LIST SOURCE ===");
   console.log(`Input File: ${inputPath}`);
   if (forceFetch) console.log("Cache bypass requested (--force)");
+  if (matchPattern) console.log(`Target link filter / targeted force requested: --match "${matchPattern}"`);
   if (verbose) console.log("Verbose output enabled (--verbose)");
   console.log("");
 
@@ -253,7 +304,7 @@ async function runAudit() {
 
     const processItem = async (title: string, url: string, indent: string = "  ") => {
       totalCount++;
-      const result = await checkUrl(url, forceFetch);
+      const result = await checkUrl(url, forceFetch, matchPattern);
 
       if (result.fromCache) {
         cachedCount++;
@@ -263,7 +314,7 @@ async function runAudit() {
 
       const isUnreachable =
         result.status === 404 ||
-        result.date === "Unreachable" ||
+        result.date.includes("Unreachable") ||
         result.status === "Timeout" ||
         result.status === "Failed" ||
         result.status === "fetch failed";
@@ -314,6 +365,7 @@ function parseCrawlerArgs() {
   let inputPath = "";
   let forceFetch = false;
   let verbose = false;
+  let matchPattern = "";
 
   for (let i = 0; i < args.length; i++) {
     if (args[i] === "--input" && args[i + 1]) {
@@ -323,6 +375,9 @@ function parseCrawlerArgs() {
       forceFetch = true;
     } else if (args[i] === "--verbose") {
       verbose = true;
+    } else if ((args[i] === "--match" || args[i] === "--url") && args[i + 1]) {
+      matchPattern = args[i + 1];
+      i++;
     } else if (!inputPath && !args[i].startsWith("-")) {
       inputPath = args[i];
     }
@@ -333,7 +388,7 @@ function parseCrawlerArgs() {
     process.exit(1);
   }
 
-  return { inputPath, forceFetch, verbose };
+  return { inputPath, forceFetch, verbose, matchPattern };
 }
 
 runAudit();

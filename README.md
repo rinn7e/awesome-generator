@@ -61,24 +61,23 @@ pnpm run generate -- \
 Pass the path to your input JSON file to verify URL health and update timestamps:
 
 ```bash
-# Audit sources with Nix-store cache
+# Audit sources with Nix-store cache (concise output)
 pnpm run crawl -- --input /path/to/input.json
 
-# Force bypass cache and audit live
+# Verbose output (show all cached lines)
+pnpm run crawl -- --input /path/to/input.json --verbose
+
+# Targeted force-fetch on specific matching link patterns (e.g. Telegram or Facebook)
+pnpm run crawl -- --input /path/to/input.json --match t.me
+
+# Force bypass cache and audit all URLs live
 pnpm run crawl -- --input /path/to/input.json --force
 ```
 
-#### Facebook Link Audit Rule
+#### Facebook & Telegram Audit Rules
 
-Basic static HTTP `fetch()` is **strictly prohibited** for Facebook-related links (`facebook.com` / `fb.com`). Because Facebook renders page content dynamically via React/GraphQL client-side, the crawler launches a headless **Playwright Chromium browser** to render the DOM text content directly and verify that the page is publicly accessible and does not display an unavailable error message.
-
-```bash
-# Audit sources with Nix-store cache (24h TTL)
-pnpm run crawl -- --input /path/to/input.json
-
-# Bypass cache and force re-crawl all URLs
-pnpm run crawl -- --input /path/to/input.json --force
-```
+- **Facebook Link Rule**: Static HTTP `fetch()` is **strictly prohibited** for Facebook links (`facebook.com` / `fb.com`). The crawler uses Playwright headless Chromium DOM text scanning to verify client-side React page availability.
+- **Telegram Credibility Rule**: Telegram links (`t.me/*`) are audited for community credibility. Any Telegram channel or group with **fewer than 50 subscribers/members** (e.g. 2 subscribers) is automatically flagged as `404 Unreachable` and rejected.
 
 #### Real-World Example:
 ```bash
