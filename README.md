@@ -41,15 +41,15 @@ Pass the path to your input JSON file and desired output Markdown file:
 
 ```bash
 # Using CLI options
-npm run generate -- --input /path/to/input.json --output /path/to/README.md
+pnpm run generate -- --input /path/to/input.json --output /path/to/README.md
 
 # Using positional arguments
-npx ts-node src/index.ts /path/to/input.json /path/to/README.md
+pnpm ts-node src/index.ts /path/to/input.json /path/to/README.md
 ```
 
 #### Real-World Example:
 ```bash
-npm run generate -- \
+pnpm run generate -- \
   --input ../awesome-list/awesome-cambodia-jobs/cambodia-jobs.json \
   --output ../awesome-list/awesome-cambodia-jobs/README.md
 ```
@@ -61,16 +61,28 @@ npm run generate -- \
 Pass the path to your input JSON file to verify URL health and update timestamps:
 
 ```bash
+# Audit sources with Nix-store cache
+pnpm run crawl -- --input /path/to/input.json
+
+# Force bypass cache and audit live
+pnpm run crawl -- --input /path/to/input.json --force
+```
+
+#### Facebook Link Audit Rule
+
+Basic static HTTP `fetch()` is **strictly prohibited** for Facebook-related links (`facebook.com` / `fb.com`). Because Facebook renders page content dynamically via React/GraphQL client-side, the crawler launches a headless **Playwright Chromium browser** to render the DOM text content directly and verify that the page is publicly accessible and does not display an unavailable error message.
+
+```bash
 # Audit sources with Nix-store cache (24h TTL)
-npm run crawl -- --input /path/to/input.json
+pnpm run crawl -- --input /path/to/input.json
 
 # Bypass cache and force re-crawl all URLs
-npm run crawl -- --input /path/to/input.json --force
+pnpm run crawl -- --input /path/to/input.json --force
 ```
 
 #### Real-World Example:
 ```bash
-npm run crawl -- \
+pnpm run crawl -- \
   --input ../awesome-list/awesome-cambodia-jobs/cambodia-jobs.json
 ```
 

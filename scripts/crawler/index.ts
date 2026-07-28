@@ -1,12 +1,12 @@
-import * as fs from "fs";
-import * as path from "path";
-import * as crypto from "crypto";
-import { validateAwesomeList, AwesomeList } from "../../src/types";
+import fs from "fs";
+import path from "path";
+import crypto from "crypto";
+import { chromium, Browser } from "playwright";
+import { AwesomeList } from "../../src/types";
 
-const CACHE_DIR = path.resolve(__dirname, "cache");
-const STORE_DIR = path.join(CACHE_DIR, "store");
-const NIX_STORE_FILE = path.join(CACHE_DIR, "nix-store.json");
-const DEFAULT_TTL_MS = 24 * 60 * 60 * 1000; // 24 Hours
+const STORE_DIR = path.join(__dirname, "cache", "store");
+const NIX_STORE_FILE = path.join(__dirname, "cache", "nix-store.json");
+const DEFAULT_TTL_MS = 30 * 24 * 60 * 60 * 1000; // 30 Days
 
 interface NixStoreEntry {
   hash: string;
@@ -17,54 +17,29 @@ interface NixStoreEntry {
   expiresAt: string;
 }
 
-interface NixStore {
-  version: number;
-  updatedAt: string;
+interface NixStoreManifest {
+  version: string;
   store: Record<string, NixStoreEntry>;
 }
 
-function parseCrawlerArgs(): { inputPath: string; forceFetch: boolean } {
-  const args = process.argv.slice(2);
-  let inputPath = "";
-  let forceFetch = false;
+let sharedBrowser: Browser | null = null;
 
-  for (let i = 0; i < args.length; i++) {
-    const arg = args[i];
-    if (arg === "--input" || arg === "-i") {
-      inputPath = args[++i];
-    } else if (arg === "--force" || arg === "--no-cache") {
-      forceFetch = true;
-    } else if (!inputPath && !arg.startsWith("-")) {
-      inputPath = arg;
-    }
+async function getSharedBrowser(): Promise<Browser> {
+  if (!sharedBrowser) {
+    sharedBrowser = await chromium.launch({ headless: true });
   }
-
-  if (!inputPath) {
-    console.error("Error: Missing required input file path.\n");
-    console.log("Usage:");
-    console.log("  npm run crawl -- --input <path/to/input.json> [--force]");
-    console.log("  npx ts-node scripts/crawler/index.ts <path/to/input.json> [--force]\n");
-    process.exit(1);
-  }
-
-  return {
-    inputPath: path.resolve(inputPath),
-    forceFetch,
-  };
+  return sharedBrowser;
 }
 
-function loadAndValidateDataset(inputPath: string): AwesomeList {
-  if (!fs.existsSync(inputPath)) {
-    throw new Error(`Input JSON file not found: ${inputPath}`);
+async function closeSharedBrowser() {
+  if (sharedBrowser) {
+    await sharedBrowser.close();
+    sharedBrowser = null;
   }
-
-  const rawContent = fs.readFileSync(inputPath, "utf8");
-  const rawJson = JSON.parse(rawContent);
-  return validateAwesomeList(rawJson);
 }
 
 function getUrlHash(url: string): string {
-  return crypto.createHash("sha256").update(url.trim()).digest("hex").slice(0, 32);
+  return crypto.createHash("sha256").update(url).digest("hex").slice(0, 32);
 }
 
 function ensureCacheDirs() {
@@ -73,30 +48,25 @@ function ensureCacheDirs() {
   }
 }
 
-function loadNixStore(): NixStore {
+function loadNixStore(): NixStoreManifest {
   ensureCacheDirs();
   if (fs.existsSync(NIX_STORE_FILE)) {
     try {
-      const content = fs.readFileSync(NIX_STORE_FILE, "utf8");
-      return JSON.parse(content);
+      return JSON.parse(fs.readFileSync(NIX_STORE_FILE, "utf8"));
     } catch {
-      // Fallback on corrupt file
+      // Return fresh manifest if corrupt
     }
   }
-  return {
-    version: 1,
-    updatedAt: new Date().toISOString(),
-    store: {},
-  };
+  return { version: "1.0", store: {} };
 }
 
-function saveNixStore(store: NixStore) {
+function saveNixStore(manifest: NixStoreManifest) {
   ensureCacheDirs();
-  store.updatedAt = new Date().toISOString();
-  fs.writeFileSync(NIX_STORE_FILE, JSON.stringify(store, null, 2), "utf8");
+  fs.writeFileSync(NIX_STORE_FILE, JSON.stringify(manifest, null, 2), "utf8");
 }
 
 function getCachedEntry(url: string, forceFetch: boolean): NixStoreEntry | null {
+  if (forceFetch) return null;
   const hash = getUrlHash(url);
   const entryFile = path.join(STORE_DIR, `${hash}.json`);
 
@@ -142,6 +112,43 @@ function setCachedEntry(url: string, status: number | string, date: string): Nix
   return entry;
 }
 
+/**
+ * Scan Facebook & complex JS web links using Playwright DOM rendering
+ */
+async function scanPlaywrightDom(url: string) {
+  let context = null;
+  let page = null;
+  try {
+    const browser = await getSharedBrowser();
+    context = await browser.newContext({
+      userAgent:
+        "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+      locale: "en-US",
+    });
+    page = await context.newPage();
+    await page.goto(url, { waitUntil: "domcontentloaded", timeout: 10000 });
+    await page.waitForTimeout(1000);
+
+    const bodyText = (await page.innerText("body")).toLowerCase();
+
+    const isUnavailable =
+      bodyText.includes("this content isn't available right now") ||
+      bodyText.includes("this content isn't available") ||
+      bodyText.includes("isn't available right now") ||
+      bodyText.includes("this page isn't available") ||
+      bodyText.includes("content not found");
+
+    const finalStatus = isUnavailable ? 404 : 200;
+    const finalDate = isUnavailable ? "Unreachable" : "Active";
+    return { status: finalStatus, date: finalDate };
+  } catch {
+    return { status: 404, date: "Unreachable" };
+  } finally {
+    if (page) await page.close().catch(() => {});
+    if (context) await context.close().catch(() => {});
+  }
+}
+
 async function checkUrl(url: string, forceFetch: boolean) {
   const cached = getCachedEntry(url, forceFetch);
   if (cached) {
@@ -150,6 +157,18 @@ async function checkUrl(url: string, forceFetch: boolean) {
       date: cached.date,
       fromCache: true,
       hash: cached.hash,
+    };
+  }
+
+  // RULE: Facebook-related links MUST NOT use basic fetch(). Scan DOM via Playwright headless browser!
+  if (url.includes("facebook.com") || url.includes("fb.com")) {
+    const { status, date } = await scanPlaywrightDom(url);
+    const saved = setCachedEntry(url, status, date);
+    return {
+      status,
+      date,
+      fromCache: false,
+      hash: saved.hash,
     };
   }
 
@@ -196,13 +215,13 @@ async function checkUrl(url: string, forceFetch: boolean) {
       fromCache: false,
       hash: saved.hash,
     };
-  } catch (err: any) {
-    const statusStr = err?.name === "AbortError" ? "Timeout" : err?.message || "Failed";
-    const dateStr = "Unreachable";
-    const saved = setCachedEntry(url, statusStr, dateStr);
+  } catch {
+    // Fallback to Playwright DOM rendering if fetch() failed (e.g. SSL/Cloudflare/CORS)
+    const { status, date } = await scanPlaywrightDom(url);
+    const saved = setCachedEntry(url, status, date);
     return {
-      status: statusStr,
-      date: dateStr,
+      status,
+      date,
       fromCache: false,
       hash: saved.hash,
     };
@@ -210,43 +229,111 @@ async function checkUrl(url: string, forceFetch: boolean) {
 }
 
 async function runAudit() {
-  const { inputPath, forceFetch } = parseCrawlerArgs();
+  const { inputPath, forceFetch, verbose } = parseCrawlerArgs();
 
   console.log("=== CRAWLING AND AUDITING AWESOME LIST SOURCE ===");
   console.log(`Input File: ${inputPath}`);
-  if (forceFetch) {
-    console.log("Cache bypass requested (--force)\n");
-  } else {
-    console.log("Nix-store JSON cache enabled (TTL 24h)\n");
-  }
+  if (forceFetch) console.log("Cache bypass requested (--force)");
+  if (verbose) console.log("Verbose output enabled (--verbose)");
+  console.log("");
 
-  const list = loadAndValidateDataset(inputPath);
-  const auditResults: any[] = [];
+  const rawJson = fs.readFileSync(inputPath, "utf8");
+  const dataset: AwesomeList = JSON.parse(rawJson);
 
-  console.log(`Dataset: ${list.title} (${list.slug})`);
-  for (const section of list.sections) {
-    console.log(`\nSection: ${section.title}`);
+  console.log(`Dataset: ${dataset.title} (${dataset.slug})`);
+  console.log("");
+
+  let totalCount = 0;
+  let cachedCount = 0;
+  let crawledCount = 0;
+  let unreachableCount = 0;
+
+  for (const section of dataset.sections) {
+    let printedSectionHeader = false;
+
+    const processItem = async (title: string, url: string, indent: string = "  ") => {
+      totalCount++;
+      const result = await checkUrl(url, forceFetch);
+
+      if (result.fromCache) {
+        cachedCount++;
+      } else {
+        crawledCount++;
+      }
+
+      const isUnreachable =
+        result.status === 404 ||
+        result.date === "Unreachable" ||
+        result.status === "Timeout" ||
+        result.status === "Failed" ||
+        result.status === "fetch failed";
+
+      if (isUnreachable) {
+        unreachableCount++;
+      }
+
+      // Print cached entries ONLY if verbose is true; always print newly crawled or error entries
+      if (verbose || !result.fromCache || isUnreachable) {
+        if (!printedSectionHeader) {
+          console.log(`Section: ${section.title}`);
+          printedSectionHeader = true;
+        }
+        const cacheTag = result.fromCache ? " [CACHE]" : " [CRAWLED:" + result.hash.slice(0, 8) + "]";
+        console.log(
+          `${indent}${cacheTag} ${title} (${url}) -> Status: ${result.status}, Date: ${result.date}`
+        );
+      }
+    };
+
     if (section.items && section.items.length > 0) {
       for (const item of section.items) {
-        const info = await checkUrl(item.url, forceFetch);
-        const cacheTag = info.fromCache ? `[CACHE HIT:${info.hash.slice(0, 8)}]` : `[CRAWLED:${info.hash.slice(0, 8)}]`;
-        console.log(` ${cacheTag} ${item.title} (${item.url}) -> Status: ${info.status}, Date: ${info.date}`);
-        auditResults.push({
-          list: list.slug,
-          section: section.title,
-          title: item.title,
-          url: item.url,
-          status: info.status,
-          date: info.date,
-          fromCache: info.fromCache,
-          nixHash: info.hash,
-        });
+        await processItem(item.title, item.url, "  ");
+      }
+    }
+
+    if (section.subsections && section.subsections.length > 0) {
+      for (const sub of section.subsections) {
+        if (sub.items && sub.items.length > 0) {
+          for (const item of sub.items) {
+            await processItem(item.title, item.url, "    ");
+          }
+        }
       }
     }
   }
 
-  console.log("\n=== AUDIT SUMMARY JSON ===");
-  console.log(JSON.stringify(auditResults, null, 2));
+  await closeSharedBrowser();
+  console.log("");
+  console.log(
+    `=== AUDIT SUMMARY: Total: ${totalCount} | Crawled: ${crawledCount} | Cached: ${cachedCount} | Unreachable: ${unreachableCount} ===`
+  );
+}
+
+function parseCrawlerArgs() {
+  const args = process.argv.slice(2);
+  let inputPath = "";
+  let forceFetch = false;
+  let verbose = false;
+
+  for (let i = 0; i < args.length; i++) {
+    if (args[i] === "--input" && args[i + 1]) {
+      inputPath = args[i + 1];
+      i++;
+    } else if (args[i] === "--force") {
+      forceFetch = true;
+    } else if (args[i] === "--verbose") {
+      verbose = true;
+    } else if (!inputPath && !args[i].startsWith("-")) {
+      inputPath = args[i];
+    }
+  }
+
+  if (!inputPath) {
+    console.error("Error: Please specify input JSON file via --input <path>");
+    process.exit(1);
+  }
+
+  return { inputPath, forceFetch, verbose };
 }
 
 runAudit();
