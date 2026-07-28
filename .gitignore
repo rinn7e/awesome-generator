@@ -7,5 +7,6 @@ yarn-error.log*
 scripts/crawler/cache/
 
 # Untracked custom & scratch scripts
+output/
 scratch/
 scripts/scratch/
