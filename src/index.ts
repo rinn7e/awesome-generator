@@ -1,5 +1,6 @@
 import * as fs from "fs";
 import * as path from "path";
+import { formatAiDeclaration } from "./formatter/ai-declaration-formatter";
 import { formatAwesomeList } from "./formatter/awesome-formatter";
 import { validateAwesomeList } from "./types";
 
@@ -63,6 +64,13 @@ function main() {
     fs.writeFileSync(outputPath, mdContent, "utf8");
 
     console.log(`Successfully generated Awesome list README at: ${outputPath}`);
+
+    // Optionally write the AI-DECLARATION.md file next to the README
+    if (validatedList.aiDeclaration) {
+      const declarationPath = path.join(outputDir, "AI-DECLARATION.md");
+      fs.writeFileSync(declarationPath, formatAiDeclaration(validatedList.aiDeclaration), "utf8");
+      console.log(`Successfully generated AI declaration at: ${declarationPath}`);
+    }
   } catch (err: any) {
     console.error(`Failed to process dataset: ${err?.message || String(err)}`);
     process.exit(1);

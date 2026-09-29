@@ -21,6 +21,7 @@ It also includes an integrated **Nix-style source crawler and auditor** (`npm ru
 - **Awesome-Lint Compliant**: Automatic badge headers, slugified Table of Contents (`## Contents`), and standardized list formatting (`- [Title](URL) *(Jul 2026)* - Description.`).
 - **Nix-Style Store Crawler Cache**: Content-addressed SHA-256 caching for link auditing (`scripts/crawler/cache/`).
 - **Human-Readable Timestamps**: Formats entry update dates into subtle month-year tags (e.g. `*(Jul 2026)*`).
+- **AI Declaration**: Optionally generates an [`AI-DECLARATION.md`](https://ai-declaration.md) file next to the README, plus its badge under the title (see [AI Declaration](#ai-declaration-optional)).
 
 ---
 
@@ -97,7 +98,8 @@ awesome-generator/
 │   ├── types.ts                  # io-ts schema validation & types
 │   ├── index.ts                  # Main CLI entrypoint
 │   └── formatter/
-│       └── awesome-formatter.ts  # Markdown generator & lint formatter
+│       ├── awesome-formatter.ts  # Markdown generator & lint formatter
+│       └── ai-declaration-formatter.ts  # AI-DECLARATION.md & badge generator
 ├── scripts/
 │   └── crawler/
 │       ├── index.ts              # Web crawler & health auditor
@@ -133,6 +135,39 @@ Your input `.json` file must conform to the `AwesomeList` `io-ts` schema:
   ]
 }
 ```
+
+
+### AI Declaration (optional)
+
+Add an `aiDeclaration` object to also generate an `AI-DECLARATION.md` file (following the
+[AI-DECLARATION.md](https://ai-declaration.md/en/0.1.2) standard, v0.1.2) next to the output
+README, and an AI-DECLARATION badge on its own line under the title:
+
+```json
+{
+  "slug": "awesome-cambodia-jobs",
+  "...": "...",
+  "aiDeclaration": {
+    "level": "assist",
+    "processes": {
+      "design": "hint",
+      "implementation": "assist",
+      "review": "none"
+    },
+    "notes": [
+      "LLM used: Claude Opus 5.5 (Anthropic), via Claude Code."
+    ]
+  }
+}
+```
+
+- `level` (required): one of `none`, `hint`, `assist`, `pair`, `copilot`, `auto`.
+- `notes` (required, at least one): rendered as the `## Notes` bullet list the standard requires.
+- `processes` (optional): levels per phase, keyed by `design`, `implementation`, `testing`,
+  `documentation`, `review` or `deployment`.
+- `components` (optional): levels per file or directory, e.g. `{ "scripts/": "auto" }`.
+
+The badge passes `awesome-lint`, and the Awesome guidelines only forbid CI badges.
 
 ---
 

@@ -1,4 +1,5 @@
 import { AwesomeList, AwesomeSection } from "../types";
+import { formatAiDeclarationBadge } from "./ai-declaration-formatter";
 
 function slugify(text: string): string {
   return text
@@ -94,6 +95,12 @@ export function formatAwesomeList(list: AwesomeList): string {
   // Title with Badge
   lines.push(`# Awesome ${list.title} [![Awesome](${badgeUrl})](${badgeLink})`);
   lines.push("");
+
+  // AI declaration badge on its own line, keeping the heading to the Awesome badge only
+  if (list.aiDeclaration) {
+    lines.push(formatAiDeclarationBadge(list.aiDeclaration.level));
+    lines.push("");
+  }
 
   // Description
   lines.push(list.description.trim());
